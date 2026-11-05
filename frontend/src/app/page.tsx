@@ -33,10 +33,16 @@ export default function Home() {
     setError(null);
 
     try {
+      // Ensure the URL has a protocol so the backend's @URL validation accepts it
+      let urlToShorten = longUrl.trim();
+      if (!/^https?:\/\//i.test(urlToShorten)) {
+        urlToShorten = 'https://' + urlToShorten;
+      }
+
       const response = await fetch("/api/v1/shorten", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ longUrl }),
+        body: JSON.stringify({ longUrl: urlToShorten }),
       });
 
       if (response.ok) {

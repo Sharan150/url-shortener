@@ -1,10 +1,12 @@
 services:
+  # Backend - Spring Boot API
   - type: web
     name: premium-url-shortener-backend
     env: docker
     dockerfilePath: ./Dockerfile
     plan: free
     region: ohio
+    healthCheckPath: /actuator/health
     envVars:
       - key: SPRING_DATASOURCE_URL
         sync: false
@@ -14,7 +16,17 @@ services:
         sync: false
       - key: REDIS_HOST
         sync: false
-      - key: REDIS_PORT
-        sync: false
       - key: REDIS_PASSWORD
         sync: false
+
+  # Frontend - Next.js
+  - type: web
+    name: premium-url-shortener-frontend
+    env: docker
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    plan: free
+    region: ohio
+    envVars:
+      - key: BACKEND_URL
+        value: https://premium-url-shortener-backend.onrender.com

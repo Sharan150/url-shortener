@@ -21,6 +21,9 @@ import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 
 @RestController
+@CrossOrigin(origins = "*", allowedHeaders = "*", methods = {
+    RequestMethod.GET, RequestMethod.POST, RequestMethod.OPTIONS
+})
 public class UrlShortenerController {
 
     private static final Logger logger = LoggerFactory.getLogger(UrlShortenerController.class);
