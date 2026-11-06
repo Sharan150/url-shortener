@@ -22,7 +22,7 @@ export function HeroSection({ longUrl, setLongUrl, isLoading, onSubmit }: HeroSe
       <form onSubmit={onSubmit} className="flex flex-col md:flex-row gap-4 items-center w-full relative z-10">
         <div className="relative w-full shadow-[inset_0_2px_4px_rgba(0,0,0,0.04)] rounded-xl border border-gray-200 bg-surface focus-within:ring-2 focus-within:ring-primary/20 transition-all overflow-hidden flex items-center px-4 py-3">
           <input
-            type="url"
+            type="text"
             required
             value={longUrl}
             onChange={(e) => setLongUrl(e.target.value)}

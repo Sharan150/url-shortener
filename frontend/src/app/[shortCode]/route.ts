@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server';
 
+// Support both env var names: BACKEND_URL (Render/Docker) and NEXT_PUBLIC_API_URL (Vercel)
+function getBackendUrl(): string {
+  const url = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+  return url.replace(/\/$/, '');
+}
+
 export async function GET(request: Request, { params }: { params: Promise<{ shortCode: string }> }) {
   const { shortCode } = await params;
-  const backendUrl = (process.env.BACKEND_URL || 'http://localhost:8080').replace(/\/$/, '');
+  const backendUrl = getBackendUrl();
 
   try {
     // Proxy the redirect server-side: fetch the backend's redirect endpoint

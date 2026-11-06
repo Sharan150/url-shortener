@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server';
 
+// Support both env var names: BACKEND_URL (Render/Docker) and NEXT_PUBLIC_API_URL (Vercel)
+function getBackendUrl(): string {
+  const url = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+  return url.replace(/\/$/, '');
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const backendUrl = (process.env.BACKEND_URL || 'http://localhost:8080').replace(/\/$/, '');
+    const backendUrl = getBackendUrl();
 
     // Ensure the URL has a protocol prefix before forwarding to the backend,
     // because the backend's @URL validator rejects URLs without one.
