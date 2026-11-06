@@ -1,6 +1,8 @@
 # Premium URL Shortener
 
-🚀 **Live Demo:** [https://url-shortener-ivory-two.vercel.app](https://url-shortener-ivory-two.vercel.app/)
+🚀 **Live Demo:** [https://premium-url-shortener-frontend.onrender.com](https://premium-url-shortener-frontend.onrender.com/)
+
+*(Backup / Vercel mirror: [https://url-shortener-ivory-two.vercel.app](https://url-shortener-ivory-two.vercel.app/))*
 
 A high-performance, enterprise-grade URL shortener built with Spring Boot, Next.js, PostgreSQL, and Redis. a robust Spring Boot backend designed for high concurrency, and a stunning, responsive Next.js frontend.
 

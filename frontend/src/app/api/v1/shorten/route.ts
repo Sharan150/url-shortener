@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 function getBackendUrl(): string {
-  const url = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+  const url = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'https://premium-url-shortener-backend.onrender.com';
   return url.replace(/\/$/, '');
 }
 
