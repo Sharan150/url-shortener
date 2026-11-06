@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 
-// Support both env var names: BACKEND_URL (Render/Docker) and NEXT_PUBLIC_API_URL (Vercel)
 function getBackendUrl(): string {
   const url = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
   return url.replace(/\/$/, '');
@@ -8,45 +7,78 @@ function getBackendUrl(): string {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => ({}));
     const backendUrl = getBackendUrl();
 
-    // Ensure the URL has a protocol prefix before forwarding to the backend,
-    // because the backend's @URL validator rejects URLs without one.
-    let url = body.longUrl?.trim() || '';
-    if (url && !/^https?:\/\//i.test(url)) {
+    let url = (body.longUrl || '').trim();
+    if (!url) {
+      return NextResponse.json({ error: 'Please enter a valid URL to shorten.' }, { status: 400 });
+    }
+
+    // Auto-prefix protocol if missing
+    if (!/^https?:\/\//i.test(url)) {
       url = 'https://' + url;
     }
 
-    console.log(`[API Proxy] Proxying to: ${backendUrl}/api/v1/shorten`);
+    // Validate basic URL structure
+    try {
+      new URL(url);
+    } catch {
+      return NextResponse.json({ error: 'Invalid URL format. Example: https://example.com' }, { status: 400 });
+    }
 
-    const res = await fetch(`${backendUrl}/api/v1/shorten`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ longUrl: url }),
-    });
+    // Extract caller IP to pass to backend rate limiter
+    const forwardedFor = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || '';
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (forwardedFor) {
+      headers['X-Forwarded-For'] = forwardedFor;
+    }
+
+    // 15-second timeout controller
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    let res: Response;
+    try {
+      res = await fetch(`${backendUrl}/api/v1/shorten`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ longUrl: url }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!res.ok) {
-      console.error(`[API Proxy] Backend returned status: ${res.status}`);
-      // The rate limiter may return plain text, so read as text first
       const errorText = await res.text();
-      console.error(`[API Proxy] Backend error body: ${errorText}`);
-
-      // Try to parse as JSON; fall back to a generic error object
       try {
         const errorJson = JSON.parse(errorText);
         return NextResponse.json(errorJson, { status: res.status });
       } catch {
-        return NextResponse.json({ error: errorText || 'Backend error' }, { status: res.status });
+        if (res.status === 429) {
+          return NextResponse.json({ error: 'Too many requests. Please wait a moment.' }, { status: 429 });
+        }
+        return NextResponse.json({ error: errorText || 'Failed to shorten URL.' }, { status: res.status });
       }
     }
 
     const data = await res.json();
-    console.log(`[API Proxy] Success — shortCode: ${data.shortCode}`);
     return NextResponse.json(data, { status: res.status });
 
   } catch (error: any) {
-    console.error(`[API Proxy] Exception: ${error.message}`);
-    return NextResponse.json({ error: 'Unable to reach the shortening service' }, { status: 502 });
+    console.error(`[API Proxy] Error: ${error?.message}`);
+    if (error?.name === 'AbortError') {
+      return NextResponse.json(
+        { error: 'Server took too long to respond. It may be waking up — please try again in a moment.' },
+        { status: 504 }
+      );
+    }
+    return NextResponse.json(
+      { error: 'Unable to reach the server. It may be waking up — please retry in a few seconds.' },
+      { status: 502 }
+    );
   }
 }

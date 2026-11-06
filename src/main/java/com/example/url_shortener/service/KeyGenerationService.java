@@ -24,8 +24,8 @@ public class KeyGenerationService {
     private final ConcurrentLinkedQueue<String> keyQueue;
     private final SnowflakeIdGenerator idGenerator;
 
-    private static final int LOW_WATER_MARK = 5000;
-    private static final int BATCH_SIZE = 10000;
+    private static final int LOW_WATER_MARK = 100;
+    private static final int BATCH_SIZE = 200;
 
     public KeyGenerationService(UnusedKeyRepository unusedKeyRepository) {
         this.unusedKeyRepository = unusedKeyRepository;
@@ -35,26 +35,38 @@ public class KeyGenerationService {
 
     @PostConstruct
     public void init() {
-        hydrateQueue();
+        // Pre-fill queue in-memory immediately so the application is ready instantly
+        for (int i = 0; i < LOW_WATER_MARK; i++) {
+            keyQueue.offer(Base62Encoder.encode(idGenerator.nextId()));
+        }
+        try {
+            hydrateQueue();
+        } catch (Exception e) {
+            logger.warn("Initial DB key hydration skipped: {}", e.getMessage());
+        }
     }
 
     public String getNextKey() {
         String key = keyQueue.poll();
-        if (key == null) {
-            hydrateQueue();
-            key = keyQueue.poll();
-            if (key == null) {
-                return Base62Encoder.encode(idGenerator.nextId());
-            }
+        if (key != null && !key.isBlank()) {
+            return key;
         }
-        return key;
+        // Direct, fast, collision-free Snowflake ID generation
+        return Base62Encoder.encode(idGenerator.nextId());
     }
 
-    @Scheduled(fixedDelay = 5000)
+    @Scheduled(fixedDelay = 30000) // Check every 30 seconds instead of every 5 seconds
     public void checkAndHydrateQueue() {
         if (keyQueue.size() < LOW_WATER_MARK) {
-            logger.info("Key queue size {} is below low water mark {}. Hydrating...", keyQueue.size(), LOW_WATER_MARK);
-            hydrateQueue();
+            try {
+                hydrateQueue();
+            } catch (Exception e) {
+                logger.warn("Scheduled key hydration failed: {}", e.getMessage());
+                // Replenish in-memory queue using Snowflake generator
+                while (keyQueue.size() < LOW_WATER_MARK) {
+                    keyQueue.offer(Base62Encoder.encode(idGenerator.nextId()));
+                }
+            }
         }
     }
 

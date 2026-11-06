@@ -9,9 +9,9 @@ spring:
     type: com.zaxxer.hikari.HikariDataSource
     hikari:
       pool-name: UrlShortenerHikariPool
-      minimum-idle: 10
-      maximum-pool-size: 50
-      connection-timeout: 3000
+      minimum-idle: 2
+      maximum-pool-size: 10
+      connection-timeout: 30000
       idle-timeout: 600000
       max-lifetime: 1800000
 
@@ -22,7 +22,7 @@ spring:
     show-sql: false
     properties:
       hibernate:
-        format_sql: true
+        format_sql: false
         jdbc:
           batch_size: 50
 

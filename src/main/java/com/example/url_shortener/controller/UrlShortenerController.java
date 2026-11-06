@@ -18,7 +18,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
 import java.time.Duration;
-import java.util.concurrent.CompletableFuture;
 
 @RestController
 @CrossOrigin(origins = "*", allowedHeaders = "*", methods = {
@@ -47,17 +46,13 @@ public class UrlShortenerController {
     public ResponseEntity<UrlResponse> shortenUrl(@Valid @RequestBody UrlRequest request) {
         String shortCode = keyGenerationService.getNextKey();
         UrlMapping mapping = new UrlMapping(shortCode, request.getLongUrl());
-        
+
+        // Save synchronously to avoid 404 race condition when user immediately clicks link
+        urlMappingRepository.save(mapping);
+
+        // Populate cache (best-effort)
         cacheService.put(shortCode, request.getLongUrl(), Duration.ofHours(24));
-        
-        CompletableFuture.runAsync(() -> {
-            try {
-                urlMappingRepository.save(mapping);
-            } catch (Exception e) {
-                logger.error("Failed to persist URL mapping asynchronously for shortCode: {}", shortCode, e);
-            }
-        });
-        
+
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(new UrlResponse(shortCode, request.getLongUrl()));
     }
@@ -66,23 +61,23 @@ public class UrlShortenerController {
     public ResponseEntity<Void> redirect(@PathVariable String shortCode) {
         return redirectTimer.record(() -> {
             String longUrl = cacheService.get(shortCode);
-            
-            if ("".equals(longUrl)) {
+
+            if (longUrl != null && !longUrl.isBlank()) {
+                return ResponseEntity.status(HttpStatus.FOUND)
+                        .location(URI.create(longUrl))
+                        .build();
+            }
+
+            // Fallback to database
+            UrlMapping mapping = urlMappingRepository.findByShortCode(shortCode).orElse(null);
+
+            if (mapping == null) {
                 throw new ResponseStatusException(HttpStatus.NOT_FOUND, "URL not found");
             }
-            
-            if (longUrl == null) {
-                UrlMapping mapping = urlMappingRepository.findByShortCode(shortCode).orElse(null);
-                        
-                if (mapping == null) {
-                    cacheService.put(shortCode, "", Duration.ofMinutes(5));
-                    throw new ResponseStatusException(HttpStatus.NOT_FOUND, "URL not found");
-                }
-                
-                longUrl = mapping.getLongUrl();
-                cacheService.put(shortCode, longUrl, Duration.ofHours(24));
-            }
-            
+
+            longUrl = mapping.getLongUrl();
+            cacheService.put(shortCode, longUrl, Duration.ofHours(24));
+
             return ResponseEntity.status(HttpStatus.FOUND)
                     .location(URI.create(longUrl))
                     .build();

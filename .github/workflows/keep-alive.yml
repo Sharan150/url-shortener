@@ -1,27 +1,25 @@
-name: Keep Backend Alive
+name: Keep Services Alive
 
 on:
   schedule:
-    # Ping every 14 minutes — Render free tier sleeps after 15 min of inactivity
-    - cron: '*/14 * * * *'
+    # Ping every 10 minutes — Render free tier sleeps after 15 min of inactivity
+    - cron: '*/10 * * * *'
   workflow_dispatch: # Allow manual trigger from GitHub Actions UI
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping backend health endpoint
+      - name: Ping Backend and Frontend
         run: |
-          echo "Pinging backend to prevent Render free-tier sleep..."
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            --max-time 30 \
-            https://premium-url-shortener-backend.onrender.com/actuator/health)
-          echo "Response status: $STATUS"
-          if [ "$STATUS" -eq 200 ]; then
-            echo "✅ Backend is awake and healthy"
-          elif [ "$STATUS" -eq 000 ]; then
-            echo "⏳ Backend is waking up (cold start) — this is expected"
-          else
-            echo "⚠️ Backend returned status $STATUS"
-          fi
+          echo "Pinging backend actuator health endpoint..."
+          BACKEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --max-time 45 \
+            https://premium-url-shortener-backend.onrender.com/actuator/health || true)
+          echo "Backend response: $BACKEND_STATUS"
 
+          echo "Pinging frontend..."
+          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --max-time 45 \
+            https://premium-url-shortener-frontend.onrender.com/ || true)
+          echo "Frontend response: $FRONTEND_STATUS"

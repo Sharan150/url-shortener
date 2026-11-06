@@ -6,64 +6,91 @@ import { HeroSection } from "@/components/HeroSection";
 import { ResultCard } from "@/components/ResultCard";
 import { RecentLinks, RecentLinkData } from "@/components/RecentLinks";
 
-const mockRecentLinks: RecentLinkData[] = [
-  { id: "1", originalUrl: "https://github.com/facebook/react", shortUrl: "abc12", clicks: 124, date: "Oct 12, 2026" },
-  { id: "2", originalUrl: "https://news.ycombinator.com", shortUrl: "xyz89", clicks: 42, date: "Oct 11, 2026" },
-  { id: "3", originalUrl: "https://figma.com/design-systems", shortUrl: "def34", clicks: 890, date: "Oct 10, 2026" },
-];
+const STORAGE_KEY = "url_shortener_recent_links";
 
 export default function Home() {
   const [longUrl, setLongUrl] = useState("");
   const [shortCode, setShortCode] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
-  const [recentLinks, setRecentLinks] = useState<RecentLinkData[]>(mockRecentLinks);
+  const [recentLinks, setRecentLinks] = useState<RecentLinkData[]>([]);
   const [origin, setOrigin] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setOrigin(window.location.origin);
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          setRecentLinks(parsed);
+        }
+      }
+    } catch {
+      // Ignore local storage parse errors
+    }
   }, []);
 
   const handleShortenUrl = async (e: FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    setError(null);
     setShortCode(null);
     setIsCopied(false);
-    setError(null);
+
+    let trimmedUrl = longUrl.trim();
+    if (!trimmedUrl) {
+      setError("Please enter a URL to shorten.");
+      return;
+    }
+
+    // Auto-prefix protocol if missing
+    if (!/^https?:\/\//i.test(trimmedUrl)) {
+      trimmedUrl = "https://" + trimmedUrl;
+    }
+
+    setIsLoading(true);
 
     try {
-      // Ensure the URL has a protocol so the backend's @URL validation accepts it
-      let urlToShorten = longUrl.trim();
-      if (!/^https?:\/\//i.test(urlToShorten)) {
-        urlToShorten = 'https://' + urlToShorten;
-      }
-
       const response = await fetch("/api/v1/shorten", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ longUrl: urlToShorten }),
+        body: JSON.stringify({ longUrl: trimmedUrl }),
       });
 
-      if (response.ok) {
-        const payload = await response.json();
+      const payload = await response.json().catch(() => ({}));
+
+      if (response.ok && payload.shortCode) {
         setShortCode(payload.shortCode);
-        
+
         const newLink: RecentLinkData = {
           id: Date.now().toString(),
-          originalUrl: longUrl,
+          originalUrl: trimmedUrl,
           shortUrl: payload.shortCode,
           clicks: 0,
-          date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+          date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
         };
-        
-        setRecentLinks(prev => [newLink, ...prev].slice(0, 5));
+
+        setRecentLinks((prev) => {
+          const updated = [newLink, ...prev.filter((l) => l.shortUrl !== payload.shortCode)].slice(0, 10);
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+          } catch {
+            // Ignore storage errors
+          }
+          return updated;
+        });
+
         setLongUrl("");
       } else {
-        setError("We couldn't shorten that URL. Please check the format and try again.");
+        const errorMsg =
+          payload.error ||
+          payload.message ||
+          "Unable to shorten this URL. Please verify the URL and try again.";
+        setError(errorMsg);
       }
-    } catch (err) {
-      setError("Unable to reach the server. Please ensure you are connected to the internet.");
+    } catch {
+      setError("Connection timed out. The server may be waking up — please try again in a moment.");
     } finally {
       setIsLoading(false);
     }
@@ -80,26 +107,26 @@ export default function Home() {
 
   return (
     <main className="flex-1 flex flex-col items-center pt-24 px-6 md:px-12 max-w-5xl mx-auto w-full">
-      <HeroSection 
-        longUrl={longUrl} 
-        setLongUrl={setLongUrl} 
-        isLoading={isLoading} 
-        onSubmit={handleShortenUrl} 
+      <HeroSection
+        longUrl={longUrl}
+        setLongUrl={setLongUrl}
+        isLoading={isLoading}
+        onSubmit={handleShortenUrl}
       />
-      
+
       {error && (
-        <div className="mt-4 text-red-500 font-sans text-sm p-3 bg-red-50 border border-red-100 rounded-lg w-full max-w-2xl text-center">
+        <div className="mt-6 text-red-600 font-sans text-sm p-4 bg-red-50 border border-red-200 rounded-xl w-full max-w-2xl text-center shadow-xs">
           {error}
         </div>
       )}
 
       <AnimatePresence>
         {shortCode && origin && (
-          <ResultCard 
-            shortCode={shortCode} 
-            origin={origin} 
-            isCopied={isCopied} 
-            onCopy={handleCopyUrl} 
+          <ResultCard
+            shortCode={shortCode}
+            origin={origin}
+            isCopied={isCopied}
+            onCopy={handleCopyUrl}
           />
         )}
       </AnimatePresence>

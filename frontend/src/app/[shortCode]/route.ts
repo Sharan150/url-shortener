@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 
-// Support both env var names: BACKEND_URL (Render/Docker) and NEXT_PUBLIC_API_URL (Vercel)
 function getBackendUrl(): string {
   const url = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
   return url.replace(/\/$/, '');
@@ -8,24 +7,52 @@ function getBackendUrl(): string {
 
 export async function GET(request: Request, { params }: { params: Promise<{ shortCode: string }> }) {
   const { shortCode } = await params;
+
+  // Ignore static assets and reserved routes
+  if (!shortCode || shortCode.includes('.') || shortCode.startsWith('_') || shortCode === 'api') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
   const backendUrl = getBackendUrl();
 
   try {
-    // Proxy the redirect server-side: fetch the backend's redirect endpoint
-    // and extract the final destination URL, so the user's browser never
-    // sees the internal backend hostname.
-    const res = await fetch(`${backendUrl}/${shortCode}`, {
-      redirect: 'manual', // don't follow the 302 — we need the Location header
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    const location = res.headers.get('Location');
-    if (location) {
-      return NextResponse.redirect(location, 302);
+    let res: Response;
+    try {
+      res = await fetch(`${backendUrl}/${shortCode}`, {
+        redirect: 'manual',
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
     }
 
-    return NextResponse.json({ error: 'Short URL not found' }, { status: 404 });
+    const location = res.headers.get('Location') || res.headers.get('location');
+    if (location) {
+      try {
+        const destination = new URL(location);
+        return NextResponse.redirect(destination.toString(), 302);
+      } catch {
+        // If not a full URL, ensure https://
+        try {
+          const destination = new URL('https://' + location.replace(/^\/+/, ''));
+          return NextResponse.redirect(destination.toString(), 302);
+        } catch {
+          // invalid location header
+        }
+      }
+    }
+
+    if (res.status === 404) {
+      return NextResponse.json({ error: 'Short link not found or has expired.' }, { status: 404 });
+    }
+
+    return NextResponse.json({ error: 'URL not found' }, { status: 404 });
+
   } catch (error: any) {
-    console.error(`[Redirect Proxy] Failed to reach backend: ${error.message}`);
-    return NextResponse.json({ error: 'Service unavailable' }, { status: 502 });
+    console.error(`[Redirect Proxy] Error: ${error?.message}`);
+    return NextResponse.json({ error: 'Redirect service unavailable' }, { status: 502 });
   }
 }

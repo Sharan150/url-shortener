@@ -19,7 +19,8 @@ public class RateLimitingFilter implements Filter {
     private final ConcurrentHashMap<String, Bucket> cache = new ConcurrentHashMap<>();
 
     private Bucket createNewBucket() {
-        Bandwidth limit = Bandwidth.classic(10, Refill.greedy(10, Duration.ofMinutes(1)));
+        // Allow up to 60 requests per minute with refill
+        Bandwidth limit = Bandwidth.classic(60, Refill.greedy(60, Duration.ofMinutes(1)));
         return Bucket.builder().addLimit(limit).build();
     }
 
@@ -30,11 +31,11 @@ public class RateLimitingFilter implements Filter {
         HttpServletRequest req = (HttpServletRequest) request;
         HttpServletResponse res = (HttpServletResponse) response;
 
+        // Only rate limit POST /api/v1/shorten; let GET redirects, health checks, and OPTIONS pass through freely
         if (req.getRequestURI().startsWith("/api/v1/shorten") && req.getMethod().equalsIgnoreCase("POST")) {
             String ip = req.getRemoteAddr();
-            // A simple way to get client IP behind load balancers
             String forwardedFor = req.getHeader("X-Forwarded-For");
-            if (forwardedFor != null && !forwardedFor.isEmpty()) {
+            if (forwardedFor != null && !forwardedFor.isBlank()) {
                 ip = forwardedFor.split(",")[0].trim();
             }
 
@@ -44,7 +45,9 @@ public class RateLimitingFilter implements Filter {
                 chain.doFilter(request, response);
             } else {
                 res.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
-                res.getWriter().write("Too many requests");
+                res.setContentType("application/json");
+                res.setCharacterEncoding("UTF-8");
+                res.getWriter().write("{\"error\":\"Rate limit exceeded. Please wait a moment before shortening another link.\"}");
             }
         } else {
             chain.doFilter(request, response);
