@@ -1,9 +1,11 @@
 import type { NextConfig } from "next";
 
+const isDocker = process.env.STANDALONE === "1" || process.env.DOCKER_BUILD === "1";
+
 const nextConfig: NextConfig = {
-  // 'standalone' is used for Docker deployments (Render, self-hosted).
-  // Vercel ignores this setting and uses its own build pipeline.
-  output: 'standalone',
+  // Only use standalone output when building for Docker (Render).
+  // On Vercel, omit output so Vercel creates native serverless/edge functions for dynamic routes.
+  ...(isDocker ? { output: "standalone" } : {}),
 };
 
 export default nextConfig;
