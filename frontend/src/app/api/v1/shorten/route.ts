@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const backendUrl = getBackendUrl();
 
-    let url = (body.longUrl || '').trim();
+    let url = (body.longUrl || body.originalUrl || body.url || '').trim();
     if (!url) {
       return NextResponse.json({ error: 'Please enter a valid URL to shorten.' }, { status: 400 });
     }
